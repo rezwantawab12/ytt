@@ -1,6 +1,8 @@
+import os
 import yt_dlp
 import telebot
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from flask import Flask, request
 
 api_key = "7801225750:AAEqJnAvQgGI7pXXKemNkW3yp4qrdz1JOIU"
 bot = telebot.TeleBot(api_key)
@@ -22,15 +24,13 @@ def handle_message(message):
     text = message.text.strip()
     print(text)
 
-    # مرحله 1: کاربر لینک فرستاده
     if "youtube.com" in text or "youtu.be" in text:
         uurl[chat_id] = {"url": text}
         bot.send_message(chat_id, "لطفاً کیفیت مورد نظر را انتخاب کنید:", reply_markup=butt)
 
-    # مرحله 2: کاربر کیفیت را فرستاده
     elif text in valid_qualities and chat_id in uurl:
         url = uurl[chat_id]["url"]
-        q = text.replace("p", "")  # حذف p برای استفاده در فیلتر
+        q = text.replace("p", "")
 
         ydl_opts = {
             'quiet': True,
@@ -48,12 +48,30 @@ def handle_message(message):
                 markup = InlineKeyboardMarkup().add(button)
 
                 bot.send_message(chat_id, "لینک دانلود شما آماده است:", reply_markup=markup)
-                del uurl[chat_id]  # پاک کردن داده برای استفاده بعدی
+                del uurl[chat_id]
         except Exception as e:
-            bot.send_message(chat_id, "خطا در پردازش:")
+            print(e)
+            bot.send_message(chat_id, "خطا در پردازش لینک.")
 
-    # ورودی نامعتبر
     else:
         bot.send_message(chat_id, "لطفاً ابتدا یک لینک یوتیوب ارسال کنید.")
 
-bot.polling(skip_pending=True)
+# ---- Webhook برای Railway ----
+app = Flask(__name__)
+
+@app.route('/' + api_key, methods=['POST'])
+def getMessage():
+    json_string = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return '!', 200
+
+@app.route('/')
+def webhook():
+    bot.remove_webhook()
+    bot.set_webhook(url='https://YOUR-RAILWAY-APP-NAME.up.railway.app/' + api_key)
+    return 'Webhook set', 200
+
+if __name__ == "__main__":
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host="0.0.0.0", port=port)
